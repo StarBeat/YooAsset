@@ -355,7 +355,7 @@ namespace YooAsset.Editor
 			_packageListView.Clear();
 			_packageListView.ClearSelection();
 			_packageListView.itemsSource = AssetBundleCollectorSettingData.Setting.Packages;
-			_packageListView.Refresh();
+			_packageListView.Rebuild();
 
 			if (_lastModifyPackageIndex >= 0 && _lastModifyPackageIndex < _packageListView.itemsSource.Count)
 			{
@@ -435,7 +435,7 @@ namespace YooAsset.Editor
 			_groupListView.Clear();
 			_groupListView.ClearSelection();
 			_groupListView.itemsSource = selectPackage.Groups;
-			_groupListView.Refresh();
+			_groupListView.Rebuild();
 
 			if (_lastModifyGroupIndex >= 0 && _lastModifyGroupIndex < _groupListView.itemsSource.Count)
 			{

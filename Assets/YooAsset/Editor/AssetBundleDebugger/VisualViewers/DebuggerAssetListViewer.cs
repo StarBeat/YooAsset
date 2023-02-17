@@ -56,7 +56,7 @@ namespace YooAsset.Editor
 			_assetListView.Clear();
 			_assetListView.ClearSelection();
 			_assetListView.itemsSource.Clear();
-			_assetListView.Refresh();
+			_assetListView.Rebuild();
 		}
 
 		/// <summary>
@@ -68,7 +68,7 @@ namespace YooAsset.Editor
 			_assetListView.Clear();
 			_assetListView.ClearSelection();
 			_assetListView.itemsSource = FilterViewItems(debugReport, searchKeyWord);
-			_assetListView.Refresh();
+			_assetListView.Rebuild();
 		}
 		private List<DebugProviderInfo> FilterViewItems(DebugReport debugReport, string searchKeyWord)
 		{
@@ -297,7 +297,7 @@ namespace YooAsset.Editor
 			_dependListView.Clear();
 			_dependListView.ClearSelection();
 			_dependListView.itemsSource = selectedProviderInfo.DependBundleInfos;
-			_dependListView.Refresh();
+			_dependListView.Rebuild();
 		}
 	}
 }
