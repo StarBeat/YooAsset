@@ -84,7 +84,7 @@ namespace YooAsset.Editor
 			_assetListView.Clear();
 			_assetListView.ClearSelection();
 			_assetListView.itemsSource = FilterAndSortViewItems();
-			_assetListView.Rebuild();
+			_assetListView.Refresh();
 			RefreshSortingSymbol();
 		}
 		private List<ReportAssetInfo> FilterAndSortViewItems()
@@ -259,7 +259,7 @@ namespace YooAsset.Editor
 			_dependListView.Clear();
 			_dependListView.ClearSelection();
 			_dependListView.itemsSource = bundles;
-			_dependListView.Rebuild();
+			_dependListView.Refresh();
 			_bottomBar1.text = $"Depend Bundles ({bundles.Count})";
 		}
 		private VisualElement MakeDependListViewItem()

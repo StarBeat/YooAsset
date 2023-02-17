@@ -56,7 +56,7 @@ namespace YooAsset.Editor
 			_bundleListView.Clear();
 			_bundleListView.ClearSelection();
 			_bundleListView.itemsSource.Clear();
-			_bundleListView.Rebuild();
+			_bundleListView.Refresh();
 		}
 
 		/// <summary>
@@ -68,7 +68,7 @@ namespace YooAsset.Editor
 			_bundleListView.Clear();
 			_bundleListView.ClearSelection();
 			_bundleListView.itemsSource = FilterViewItems(debugReport, searchKeyWord);
-			_bundleListView.Rebuild();
+			_bundleListView.Refresh();
 		}
 		private List<DebugBundleInfo> FilterViewItems(DebugReport debugReport, string searchKeyWord)
 		{
@@ -309,7 +309,7 @@ namespace YooAsset.Editor
 			_usingListView.Clear();
 			_usingListView.ClearSelection();
 			_usingListView.itemsSource = source;
-			_usingListView.Rebuild();
+			_usingListView.Refresh();
 		}
 	}
 }

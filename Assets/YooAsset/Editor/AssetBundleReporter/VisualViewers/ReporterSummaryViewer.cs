@@ -94,7 +94,7 @@ namespace YooAsset.Editor
 			_listView.Clear();
 			_listView.ClearSelection();
 			_listView.itemsSource = _items;
-			_listView.Rebuild();
+			_listView.Refresh();
 		}
 
 		/// <summary>

@@ -93,7 +93,7 @@ namespace YooAsset.Editor
 			_bundleListView.Clear();
 			_bundleListView.ClearSelection();
 			_bundleListView.itemsSource = FilterAndSortViewItems();
-			_bundleListView.Rebuild();
+			_bundleListView.Refresh();
 			RefreshSortingSymbol();
 		}
 		private List<ReportBundleInfo> FilterAndSortViewItems()
@@ -354,7 +354,7 @@ namespace YooAsset.Editor
 			_includeListView.Clear();
 			_includeListView.ClearSelection();
 			_includeListView.itemsSource = containsList;
-			_includeListView.Rebuild();
+			_includeListView.Refresh();
 			_bottomBar1.text = $"Include Assets ({containsList.Count})";
 		}
 		private VisualElement MakeIncludeListViewItem()
