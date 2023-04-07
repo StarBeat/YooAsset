@@ -7,10 +7,10 @@
 YooAssets.Initialize();
 
 // 创建默认的资源包
-var package = YooAssets.CreateAssetsPackage("DefaultPackage");
+var package = YooAssets.CreatePackage("DefaultPackage");
 
 // 设置该资源包为默认的资源包，可以使用YooAssets相关加载接口加载该资源包内容。
-YooAssets.SetDefaultAssetsPackage(package);
+YooAssets.SetDefaultPackage(package);
 ```
 
 资源系统的运行模式支持三种：编辑器模拟模式，单机运行模式，联机运行模式。
@@ -26,7 +26,7 @@ private IEnumerator InitializeYooAsset()
 {
     var initParameters = new EditorSimulateModeParameters();
     initParameters.SimulatePatchManifestPath = EditorSimulateModeHelper.SimulateBuild("DefaultPackage");
-    yield return defaultPackage.InitializeAsync(initParameters);
+    yield return package.InitializeAsync(initParameters);
 }
 ````
 
@@ -40,7 +40,7 @@ private IEnumerator InitializeYooAsset()
 private IEnumerator InitializeYooAsset()
 {
     var initParameters = new OfflinePlayModeParameters();
-    yield return defaultPackage.InitializeAsync(initParameters);
+    yield return package.InitializeAsync(initParameters);
 }
 ````
 
@@ -65,7 +65,7 @@ private IEnumerator InitializeYooAsset()
     initParameters.QueryServices = new QueryStreamingAssetsFileServices();
     initParameters.DefaultHostServer = "http://127.0.0.1/CDN1/Android/v1.0";
     initParameters.FallbackHostServer = "http://127.0.0.1/CDN2/Android/v1.0";
-    yield return defaultPackage.InitializeAsync(initParameters);
+    yield return package.InitializeAsync(initParameters);
 }
 
 // 内置文件查询服务类
@@ -73,14 +73,16 @@ private class QueryStreamingAssetsFileServices : IQueryServices
 {
     public bool QueryStreamingAssets(string fileName)
     {
-        // 注意：使用了BetterStreamingAssets插件，使用前需要初始化该插件！
+        // StreamingAssetsHelper.cs是太空战机里提供的一个查询脚本。
         string buildinFolderName = YooAssets.GetStreamingAssetBuildinFolderName();
-        return BetterStreamingAssets.FileExists($"{buildinFolderName}/{fileName}");
+		return StreamingAssetsHelper.FileExists($"{buildinFolderName}/{fileName}");
     }
 }
 ````
 
 ### 源代码解析
+
+Package.InitializeAsync()方法解析。
 
 - 编辑器模拟模式
 
@@ -90,11 +92,11 @@ private class QueryStreamingAssetsFileServices : IQueryServices
 
 - 单机运行模式
 
-  在初始化的时候，会直接读取内置清单文件（StreamingAssets文件夹里的文件），最后根据加载的清单去验证沙盒里缓存的文件。
+  在初始化的时候，会直接读取内置清单文件（StreamingAssets文件夹里的文件），最后初始化缓存系统。
 
 - 联机运行模式
 
-  在初始化的时候，会优先从沙盒里加载清单，如果沙盒里不存在，则会尝试加载内置清单并将其拷贝到沙盒里。最后根据加载的清单去验证沙盒里缓存的文件。
+  在初始化的时候，会优先从沙盒里加载清单，如果沙盒里不存在，则会尝试加载内置清单并将其拷贝到沙盒里。最后初始化缓存系统。
 
   **注意**：如果沙盒清单和内置清单都不存在，初始化也会被判定为成功！
 

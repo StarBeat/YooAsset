@@ -7,17 +7,17 @@
 该资源版本可以通过YooAssets提供的接口来更新，也可以通过HTTP访问游戏服务器来获取。
 
 ````c#
-private IEnumerator UpdateStaticVersion()
+private IEnumerator UpdatePackageVersion()
 {
-    var package = YooAssets.GetAssetsPackage("DefaultPackage");
+    var package = YooAssets.GetPackage("DefaultPackage");
     var operation = package.UpdatePackageVersionAsync();
     yield return operation;
 
     if (operation.Status == EOperationStatus.Succeed)
     {
         //更新成功
-        string PackageVersion = operation.PackageVersion;
-        Debug.Log($"Updated package Version : {PackageVersion}");
+        string packageVersion = operation.PackageVersion;
+        Debug.Log($"Updated package Version : {packageVersion}");
     }
     else
     {
@@ -32,9 +32,9 @@ private IEnumerator UpdateStaticVersion()
 对于联机运行模式，在获取到资源版本号之后，就可以更新资源清单了。
 
 ````c#
-private IEnumerator UpdatePatchManifest()
+private IEnumerator UpdatePackageManifest()
 {
-    var package = YooAssets.GetAssetsPackage("DefaultPackage");
+    var package = YooAssets.GetPackage("DefaultPackage");
     var operation = package.UpdatePackageManifestAsync(packageVersion);
     yield return operation;
 
@@ -58,15 +58,15 @@ private IEnumerator UpdatePatchManifest()
 
 补丁包下载接口：
 
-- YooAssets.CreatePatchDownloader(int downloadingMaxNumber, int failedTryAgain, int timeout)
+- YooAssets.CreateResourceDownloader(int downloadingMaxNumber, int failedTryAgain, int timeout)
 
   用于下载更新当前资源版本所有的资源包文件。
 
-- YooAssets.CreatePatchDownloader(string[] tags, int downloadingMaxNumber, int failedTryAgain, int timeout)
+- YooAssets.CreateResourceDownloader(string[] tags, int downloadingMaxNumber, int failedTryAgain, int timeout)
 
   用于下载更新资源标签指定的资源包文件。
 
-- YooAssets.CreateBundleDownloader(string[] locations, int downloadingMaxNumber, int failedTryAgain, int timeout)
+- YooAssets.CreateBundleDownloader(AssetInfo[] assetInfos, int downloadingMaxNumber, int failedTryAgain, int timeout)
 
   用于下载更新指定的资源列表依赖的资源包文件。
 
@@ -76,8 +76,8 @@ IEnumerator Download()
     int downloadingMaxNum = 10;
     int failedTryAgain = 3;
     int timeout = 60;
-    var package = YooAssets.GetAssetsPackage("DefaultPackage");
-    var downloader = package.CreatePatchDownloader(downloadingMaxNum, failedTryAgain, timeout);
+    var package = YooAssets.GetPackage("DefaultPackage");
+    var downloader = package.CreateResourceDownloader(downloadingMaxNum, failedTryAgain, timeout);
     
     //没有需要下载的资源
     if (downloader.TotalDownloadCount == 0)
@@ -118,7 +118,7 @@ IEnumerator Download()
 ````c#
 private IEnumerator Start()
 {
-    var package = YooAssets.GetAssetsPackage("DefaultPackage");
+    var package = YooAssets.GetPackage("DefaultPackage");
     var operation = package.UpdatePackageVersionAsync(30);
     yield return operation;
     if (operation.Status == EOperationStatus.Succeed)
@@ -131,25 +131,37 @@ private IEnumerator Start()
         // 如果获取远端资源版本失败，说明当前网络无连接。
         // 在正常开始游戏之前，需要验证本地清单内容的完整性。
         string packageVersion = package.GetPackageVersion();
-        var operation = package.CheckPackageContentsAsync(packageVersion);
+        var operation = package.PreDownloadContentAsync(packageVersion);
         yield return operation;
-        if (operation.Status == EOperationStatus.Succeed)
+        if (operation.Status != EOperationStatus.Succeed)
         {
-            StartGame();
+            ShowMessageBox("请检查本地网络，有新的游戏内容需要更新！");
+            yield break;
         }
-        else
+        
+        int downloadingMaxNum = 10;
+        int failedTryAgain = 3;
+        int timeout = 60;
+        var downloader = operation.CreateResourceDownloader(downloadingMaxNum, failedTryAgain, timeout);
+        if (downloader.TotalDownloadCount > 0)   
         {
             // 资源内容本地并不完整，需要提示玩家联网更新。
             ShowMessageBox("请检查本地网络，有新的游戏内容需要更新！");
+            yield break;
         }
+        
+        // 开始游戏
+        StartGame();
     }
 }
 ````
 
 ### 源代码解析
 
+Package.UpdatePackageManifestAsync()方法解析。
+
 - 联机运行模式
 
-  UpdatePackageManifestAsync()为资源清单更新方法。该方法的内部实现原理如下：
+  通过传入的清单版本，优先比对当前激活清单的版本，如果相同就直接返回成功。如果有差异就从缓存里去查找匹配的清单，如果缓存里不存在，就去远端下载并保存到沙盒里。最后加载沙盒内匹配的清单文件。
 
-  ![image](./Image/CodeTutorial2-img1.png)
+  

@@ -4,7 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UniFramework.Machine;
-using UniFramework.Module;
+using UniFramework.Singleton;
 using YooAsset;
 
 /// <summary>
@@ -21,7 +21,7 @@ internal class FsmInitialize : IStateNode
 	void IStateNode.OnEnter()
 	{
 		PatchEventDefine.PatchStatesChange.SendEventMessage("初始化资源包！");
-		UniModule.StartCoroutine(InitPackage());
+		UniSingleton.StartCoroutine(InitPackage());
 	}
 	void IStateNode.OnUpdate()
 	{
@@ -38,11 +38,11 @@ internal class FsmInitialize : IStateNode
 
 		// 创建默认的资源包
 		string packageName = "DefaultPackage";
-		var package = YooAssets.TryGetAssetsPackage(packageName);
+		var package = YooAssets.TryGetPackage(packageName);
 		if (package == null)
 		{
-			package = YooAssets.CreateAssetsPackage(packageName);
-			YooAssets.SetDefaultAssetsPackage(package);
+			package = YooAssets.CreatePackage(packageName);
+			YooAssets.SetDefaultPackage(package);
 		}
 
 		// 编辑器下的模拟模式
@@ -50,7 +50,7 @@ internal class FsmInitialize : IStateNode
 		if (playMode == EPlayMode.EditorSimulateMode)
 		{
 			var createParameters = new EditorSimulateModeParameters();
-			createParameters.SimulatePatchManifestPath = EditorSimulateModeHelper.SimulateBuild(packageName);
+			createParameters.SimulateManifestFilePath = EditorSimulateModeHelper.SimulateBuild(packageName);
 			initializationOperation = package.InitializeAsync(createParameters);
 		}
 
@@ -142,7 +142,7 @@ internal class FsmInitialize : IStateNode
 			throw new NotImplementedException();
 		}
 
-		public FileStream LoadFromStream(DecryptFileInfo fileInfo)
+		public Stream LoadFromStream(DecryptFileInfo fileInfo)
 		{
 			BundleStream bundleStream = new BundleStream(fileInfo.FilePath, FileMode.Open);
 			return bundleStream;

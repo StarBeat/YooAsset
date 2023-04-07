@@ -14,7 +14,7 @@ namespace YooAsset.Editor
 		[MenuItem("YooAsset/ShaderVariant Collector", false, 201)]
 		public static void ShowExample()
 		{
-			ShaderVariantCollectorWindow window = GetWindow<ShaderVariantCollectorWindow>("着色器变种收集工具", true, EditorDefine.DockedWindowTypes);
+			ShaderVariantCollectorWindow window = GetWindow<ShaderVariantCollectorWindow>("着色器变种收集工具", true, WindowsDefine.DockedWindowTypes);
 			window.minSize = new Vector2(800, 600);
 		}
 
@@ -24,6 +24,7 @@ namespace YooAsset.Editor
 		private TextField _collectOutputField;
 		private Label _currentShaderCountField;
 		private Label _currentVariantCountField;
+		private SliderInt _processCapacitySlider;
 		private PopupField<string> _packageField;
 
 		public void CreateGUI()
@@ -33,7 +34,7 @@ namespace YooAsset.Editor
 				VisualElement root = this.rootVisualElement;
 
 				// 加载布局文件
-				var visualAsset = EditorHelper.LoadWindowUXML<ShaderVariantCollectorWindow>();
+				var visualAsset = UxmlLoader.LoadWindowUXML<ShaderVariantCollectorWindow>();
 				if (visualAsset == null)
 					return;
 
@@ -72,6 +73,23 @@ namespace YooAsset.Editor
 					packageContainer.Add(_packageField);
 				}
 
+				// 容器值
+				_processCapacitySlider = root.Q<SliderInt>("ProcessCapacity");
+				_processCapacitySlider.SetValueWithoutNotify(ShaderVariantCollectorSettingData.Setting.ProcessCapacity);
+#if !UNITY_2020_3_OR_NEWER
+				_processCapacitySlider.label = $"Capacity ({_processCapacitySlider.value})";
+				_processCapacitySlider.RegisterValueChangedCallback(evt =>
+				{
+					ShaderVariantCollectorSettingData.Setting.ProcessCapacity = _processCapacitySlider.value;
+					_processCapacitySlider.label = $"Capacity ({_processCapacitySlider.value})";
+				});
+#else
+				_processCapacitySlider.RegisterValueChangedCallback(evt =>
+				{
+					ShaderVariantCollectorSettingData.Setting.ProcessCapacity = _processCapacitySlider.value;
+				});
+#endif
+
 				_currentShaderCountField = root.Q<Label>("CurrentShaderCount");
 				_currentVariantCountField = root.Q<Label>("CurrentVariantCount");
 
@@ -103,7 +121,8 @@ namespace YooAsset.Editor
 		{
 			string savePath = ShaderVariantCollectorSettingData.Setting.SavePath;
 			string packageName = ShaderVariantCollectorSettingData.Setting.CollectPackage;
-			ShaderVariantCollector.Run(savePath, packageName, int.MaxValue, null);
+			int processCapacity = _processCapacitySlider.value;
+			ShaderVariantCollector.Run(savePath, packageName, processCapacity, null);
 		}
 
 		// 构建包裹相关

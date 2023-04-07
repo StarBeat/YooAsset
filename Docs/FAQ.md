@@ -4,6 +4,8 @@
 
 如果在打AssetBundle的时候，选定的构建目标是安卓。那么在windows操作系统下，编辑器的默认渲染模式为DX11，我们需要修改编辑器的渲染模式，可以通过UnityHub来修改启动项目的编辑器渲染模式，[参考官方文档](https://docs.unity3d.com/cn/2019.4/Manual/CommandLineArguments.html)。
 
+在Vulkan下打包的编辑器需要加个command -force-vulkan
+
 windows平台添加命令: **-force-gles**
 
 #### 问题：Unity2021编辑器运行游戏提示YooAssets is initialized !
@@ -28,6 +30,14 @@ YooAsset依赖于ScriptBuildPipeline（SBP），在PackageManager里找到SBP插
 #### 问题：打包的时候报错：Cannot mark assets and scenes in one AssetBundle. AssetBundle name is "assets_xxxx_scenes.bundle
 
 Unity引擎不允许把场景文件和其它资源文件一起打包。
+
+#### 问题：WebGL平台运行时报错：Failed to decompress data for the AssetBundle.
+
+WebGL平台不支持资源文件加密。在构建选项里，可以将加密方法设置为空
+
+#### 问题：有个别手机每次启动执行YooAsset初始化，都执行了有8秒钟，其它手机倒是没事。
+
+检查下手机沙盒内容是否存储在SD卡里。
 
 #### 问题：ClearCacheWhenDirty参数没了吗？
 

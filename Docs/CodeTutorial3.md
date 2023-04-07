@@ -2,11 +2,12 @@
 
 **加载方法**
 
+- LoadSceneAsync() 异步加载场景
 - LoadAssetSync() 同步加载资源对象
 - LoadAssetAsync() 异步加载资源对象
 - LoadSubAssetsSync() 同步加载子资源对象
 - LoadSubAssetsAsync() 异步加载子资源对象
-- LoadSceneAsync() 异步加载场景
+- LoadRawFileSync() 同步获取原生文件
 - LoadRawFileAsync() 异步获取原生文件
 
 **统一约定**
@@ -152,6 +153,7 @@ IEnumerator Start()
     yield return handle;
     byte[] fileData = handle.GetRawFileData();
     string fileText = handle.GetRawFileText();
+    string filePath = handle.GetRawFilePath();
 }
 ````
 
@@ -160,7 +162,7 @@ IEnumerator Start()
 通过资源标签来获取资源信息列表。
 
 ````c#
-private GetAssetInfosByTag(string tag)
+void GetAssetInfosByTag(string tag)
 {
     AssetInfo[] assetInfos = package.GetAssetInfos(tag);
     foreach (var assetInfo in assetInfos)
