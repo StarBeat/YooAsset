@@ -65,16 +65,30 @@ internal class FsmInitialize : IStateNode
 		// 联机运行模式
 		if (playMode == EPlayMode.HostPlayMode)
 		{
+			string defaultHostServer = GetHostServerURL();
+			string fallbackHostServer = GetHostServerURL();
 			var createParameters = new HostPlayModeParameters();
 			createParameters.DecryptionServices = new GameDecryptionServices();
-			createParameters.QueryServices = new GameQueryServices();
-			createParameters.DefaultHostServer = GetHostServerURL();
-			createParameters.FallbackHostServer = GetHostServerURL();
+			createParameters.BuildinQueryServices = new GameQueryServices();
+			createParameters.DeliveryQueryServices = new DefaultDeliveryQueryServices();
+			createParameters.RemoteServices = new RemoteServices(defaultHostServer, fallbackHostServer);
+			initializationOperation = package.InitializeAsync(createParameters);
+		}
+
+		// WebGL运行模式
+		if (playMode == EPlayMode.WebPlayMode)
+		{
+			string defaultHostServer = GetHostServerURL();
+			string fallbackHostServer = GetHostServerURL();
+			var createParameters = new WebPlayModeParameters();
+			createParameters.DecryptionServices = new GameDecryptionServices();
+			createParameters.BuildinQueryServices = new GameQueryServices();
+			createParameters.RemoteServices = new RemoteServices(defaultHostServer, fallbackHostServer);
 			initializationOperation = package.InitializeAsync(createParameters);
 		}
 
 		yield return initializationOperation;
-		if (package.InitializeStatus == EOperationStatus.Succeed)
+		if (initializationOperation.Status == EOperationStatus.Succeed)
 		{
 			_machine.ChangeState<FsmUpdateVersion>();
 		}
@@ -92,38 +106,50 @@ internal class FsmInitialize : IStateNode
 	{
 		//string hostServerIP = "http://10.0.2.2"; //安卓模拟器地址
 		string hostServerIP = "http://127.0.0.1";
-		string gameVersion = "v1.0";
+		string appVersion = "v1.0";
 
 #if UNITY_EDITOR
 		if (UnityEditor.EditorUserBuildSettings.activeBuildTarget == UnityEditor.BuildTarget.Android)
-			return $"{hostServerIP}/CDN/Android/{gameVersion}";
+			return $"{hostServerIP}/CDN/Android/{appVersion}";
 		else if (UnityEditor.EditorUserBuildSettings.activeBuildTarget == UnityEditor.BuildTarget.iOS)
-			return $"{hostServerIP}/CDN/IPhone/{gameVersion}";
+			return $"{hostServerIP}/CDN/IPhone/{appVersion}";
 		else if (UnityEditor.EditorUserBuildSettings.activeBuildTarget == UnityEditor.BuildTarget.WebGL)
-			return $"{hostServerIP}/CDN/WebGL/{gameVersion}";
+			return $"{hostServerIP}/CDN/WebGL/{appVersion}";
 		else
-			return $"{hostServerIP}/CDN/PC/{gameVersion}";
+			return $"{hostServerIP}/CDN/PC/{appVersion}";
 #else
 		if (Application.platform == RuntimePlatform.Android)
-			return $"{hostServerIP}/CDN/Android/{gameVersion}";
+			return $"{hostServerIP}/CDN/Android/{appVersion}";
 		else if (Application.platform == RuntimePlatform.IPhonePlayer)
-			return $"{hostServerIP}/CDN/IPhone/{gameVersion}";
+			return $"{hostServerIP}/CDN/IPhone/{appVersion}";
 		else if (Application.platform == RuntimePlatform.WebGLPlayer)
-			return $"{hostServerIP}/CDN/WebGL/{gameVersion}";
+			return $"{hostServerIP}/CDN/WebGL/{appVersion}";
 		else
-			return $"{hostServerIP}/CDN/PC/{gameVersion}";
+			return $"{hostServerIP}/CDN/PC/{appVersion}";
 #endif
 	}
 
+
 	/// <summary>
-	/// 内置文件查询服务类
+	/// 远端资源地址查询服务类
 	/// </summary>
-	private class GameQueryServices : IQueryServices
+	private class RemoteServices : IRemoteServices
 	{
-		public bool QueryStreamingAssets(string fileName)
+		private readonly string _defaultHostServer;
+		private readonly string _fallbackHostServer;
+
+		public RemoteServices(string defaultHostServer, string fallbackHostServer)
 		{
-			string buildinFolderName = YooAssets.GetStreamingAssetBuildinFolderName();
-			return StreamingAssetsHelper.FileExists($"{buildinFolderName}/{fileName}");
+			_defaultHostServer = defaultHostServer;
+			_fallbackHostServer = fallbackHostServer;
+		}
+		string IRemoteServices.GetRemoteMainURL(string fileName)
+		{
+			return $"{_defaultHostServer}/{fileName}";
+		}
+		string IRemoteServices.GetRemoteFallbackURL(string fileName)
+		{
+			return $"{_fallbackHostServer}/{fileName}";
 		}
 	}
 
@@ -144,13 +170,28 @@ internal class FsmInitialize : IStateNode
 
 		public Stream LoadFromStream(DecryptFileInfo fileInfo)
 		{
-			BundleStream bundleStream = new BundleStream(fileInfo.FilePath, FileMode.Open);
+			BundleStream bundleStream = new BundleStream(fileInfo.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
 			return bundleStream;
 		}
 
 		public uint GetManagedReadBufferSize()
 		{
 			return 1024;
+		}
+	}
+
+	/// <summary>
+	/// 默认的分发资源查询服务类
+	/// </summary>
+	private class DefaultDeliveryQueryServices : IDeliveryQueryServices
+	{
+		public DeliveryFileInfo GetDeliveryFileInfo(string packageName, string fileName)
+		{
+			throw new NotImplementedException();
+		}
+		public bool QueryDeliveryFiles(string packageName, string fileName)
+		{
+			return false;
 		}
 	}
 }

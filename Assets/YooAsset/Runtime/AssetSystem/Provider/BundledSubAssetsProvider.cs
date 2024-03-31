@@ -28,19 +28,19 @@ namespace YooAsset
 			{
 				if (IsWaitForAsyncComplete)
 				{
-					DependBundleGroup.WaitForAsyncComplete();
+					DependBundles.WaitForAsyncComplete();
 					OwnerBundle.WaitForAsyncComplete();
 				}
 
-				if (DependBundleGroup.IsDone() == false)
+				if (DependBundles.IsDone() == false)
 					return;
 				if (OwnerBundle.IsDone() == false)
 					return;
 
-				if (DependBundleGroup.IsSucceed() == false)
+				if (DependBundles.IsSucceed() == false)
 				{
 					Status = EStatus.Failed;
-					LastError = DependBundleGroup.GetLastError();
+					LastError = DependBundles.GetLastError();
 					InvokeCompletion();
 					return;
 				}
@@ -50,6 +50,12 @@ namespace YooAsset
 					Status = EStatus.Failed;
 					LastError = OwnerBundle.LastError;
 					InvokeCompletion();
+					return;
+				}
+
+				if (OwnerBundle.CacheBundle == null)
+				{
+					ProcessCacheBundleException();
 					return;
 				}
 

@@ -72,35 +72,16 @@ namespace YooAsset
 			_isUnloadSafe = false;
 			for (int i = 0; i < _providerList.Count; i++)
 			{
+				var provider = _providerList[i];
+				if (provider.IsDone)
+					continue;
+
+				provider.Update();
+
 				if (IsBusy)
 					break;
-				_providerList[i].Update();
 			}
 			_isUnloadSafe = true;
-		}
-
-		/// <summary>
-		/// 销毁
-		/// </summary>
-		public void DestroyAll()
-		{
-			foreach (var provider in _providerList)
-			{
-				provider.Destroy();
-			}
-			_providerList.Clear();
-			_providerDic.Clear();
-
-			foreach (var loader in _loaderList)
-			{
-				loader.Destroy(true);
-			}
-			_loaderList.Clear();
-			_loaderDic.Clear();
-
-			ClearSceneHandle();
-			DecryptionServices = null;
-			BundleServices = null;
 		}
 
 		/// <summary>
@@ -135,7 +116,7 @@ namespace YooAsset
 				if (loader.CanDestroy())
 				{
 					string bundleName = loader.MainBundleInfo.Bundle.BundleName;
-					loader.Destroy(false);
+					loader.Destroy();
 					_loaderList.RemoveAt(i);
 					_loaderDic.Remove(bundleName);
 				}
@@ -147,13 +128,18 @@ namespace YooAsset
 		/// </summary>
 		public void ForceUnloadAllAssets()
 		{
+#if UNITY_WEBGL
+			throw new Exception($"WebGL not support invoke {nameof(ForceUnloadAllAssets)}");
+#else
 			foreach (var provider in _providerList)
 			{
+				provider.WaitForAsyncComplete();
 				provider.Destroy();
 			}
 			foreach (var loader in _loaderList)
 			{
-				loader.Destroy(true);
+				loader.WaitForAsyncComplete();
+				loader.Destroy();
 			}
 
 			_providerList.Clear();
@@ -164,12 +150,13 @@ namespace YooAsset
 
 			// 注意：调用底层接口释放所有资源
 			Resources.UnloadUnusedAssets();
+#endif
 		}
 
 		/// <summary>
 		/// 加载场景
 		/// </summary>
-		public SceneOperationHandle LoadSceneAsync(AssetInfo assetInfo, LoadSceneMode sceneMode, bool activateOnLoad, int priority)
+		public SceneOperationHandle LoadSceneAsync(AssetInfo assetInfo, LoadSceneMode sceneMode, bool suspendLoad, int priority)
 		{
 			if (assetInfo.IsInvalid)
 			{
@@ -190,9 +177,9 @@ namespace YooAsset
 			ProviderBase provider;
 			{
 				if (_simulationOnEditor)
-					provider = new DatabaseSceneProvider(this, providerGUID, assetInfo, sceneMode, activateOnLoad, priority);
+					provider = new DatabaseSceneProvider(this, providerGUID, assetInfo, sceneMode, suspendLoad, priority);
 				else
-					provider = new BundledSceneProvider(this, providerGUID, assetInfo, sceneMode, activateOnLoad, priority);
+					provider = new BundledSceneProvider(this, providerGUID, assetInfo, sceneMode, suspendLoad, priority);
 				provider.InitSpawnDebugInfo();
 				_providerList.Add(provider);
 				_providerDic.Add(providerGUID, provider);
@@ -217,7 +204,7 @@ namespace YooAsset
 				return completedProvider.CreateHandle<AssetOperationHandle>();
 			}
 
-			string providerGUID = assetInfo.GUID;
+			string providerGUID = nameof(LoadAssetAsync) + assetInfo.GUID;
 			ProviderBase provider = TryGetProvider(providerGUID);
 			if (provider == null)
 			{
@@ -245,7 +232,7 @@ namespace YooAsset
 				return completedProvider.CreateHandle<SubAssetsOperationHandle>();
 			}
 
-			string providerGUID = assetInfo.GUID;
+			string providerGUID = nameof(LoadSubAssetsAsync) + assetInfo.GUID;
 			ProviderBase provider = TryGetProvider(providerGUID);
 			if (provider == null)
 			{
@@ -261,6 +248,34 @@ namespace YooAsset
 		}
 
 		/// <summary>
+		/// 加载所有资源对象
+		/// </summary>
+		public AllAssetsOperationHandle LoadAllAssetsAsync(AssetInfo assetInfo)
+		{
+			if (assetInfo.IsInvalid)
+			{
+				YooLogger.Error($"Failed to load all assets ! {assetInfo.Error}");
+				CompletedProvider completedProvider = new CompletedProvider(assetInfo);
+				completedProvider.SetCompleted(assetInfo.Error);
+				return completedProvider.CreateHandle<AllAssetsOperationHandle>();
+			}
+
+			string providerGUID = nameof(LoadAllAssetsAsync) + assetInfo.GUID;
+			ProviderBase provider = TryGetProvider(providerGUID);
+			if (provider == null)
+			{
+				if (_simulationOnEditor)
+					provider = new DatabaseAllAssetsProvider(this, providerGUID, assetInfo);
+				else
+					provider = new BundledAllAssetsProvider(this, providerGUID, assetInfo);
+				provider.InitSpawnDebugInfo();
+				_providerList.Add(provider);
+				_providerDic.Add(providerGUID, provider);
+			}
+			return provider.CreateHandle<AllAssetsOperationHandle>();
+		}
+
+		/// <summary>
 		/// 加载原生文件
 		/// </summary>
 		public RawFileOperationHandle LoadRawFileAsync(AssetInfo assetInfo)
@@ -273,7 +288,7 @@ namespace YooAsset
 				return completedProvider.CreateHandle<RawFileOperationHandle>();
 			}
 
-			string providerGUID = assetInfo.GUID;
+			string providerGUID = nameof(LoadRawFileAsync) + assetInfo.GUID;
 			ProviderBase provider = TryGetProvider(providerGUID);
 			if (provider == null)
 			{
@@ -297,9 +312,6 @@ namespace YooAsset
 			// 释放子场景句柄
 			_sceneHandles[providerGUID].ReleaseInternal();
 			_sceneHandles.Remove(providerGUID);
-
-			// 卸载未被使用的资源（包括场景）
-			UnloadUnusedAssets();
 		}
 		internal void UnloadAllScene()
 		{
@@ -309,9 +321,6 @@ namespace YooAsset
 				valuePair.Value.ReleaseInternal();
 			}
 			_sceneHandles.Clear();
-
-			// 卸载未被使用的资源（包括场景）
-			UnloadUnusedAssets();
 		}
 		internal void ClearSceneHandle()
 		{
@@ -383,10 +392,10 @@ namespace YooAsset
 			else
 			{
 #if UNITY_WEBGL
-			if (bundleInfo.Bundle.IsRawFile)
-				loader = new RawBundleWebLoader(this, bundleInfo);
-			else
-				loader = new AssetBundleWebLoader(this, bundleInfo);
+				if (bundleInfo.Bundle.IsRawFile)
+					loader = new RawBundleWebLoader(this, bundleInfo);
+				else
+					loader = new AssetBundleWebLoader(this, bundleInfo);
 #else
 				if (bundleInfo.Bundle.IsRawFile)
 					loader = new RawBundleFileLoader(this, bundleInfo);

@@ -38,7 +38,7 @@ namespace YooAsset.Editor
 					_buildWatch = Stopwatch.StartNew();
 					var taskAttribute = task.GetType().GetCustomAttribute<TaskAttribute>();
 					if (taskAttribute != null)
-						BuildLogger.Log($"---------------------------------------->{taskAttribute.Desc}<---------------------------------------");
+						BuildLogger.Log($"---------------------------------------->{taskAttribute.TaskDesc}<---------------------------------------");
 					task.Run(context);
 					_buildWatch.Stop();
 
@@ -46,13 +46,13 @@ namespace YooAsset.Editor
 					int seconds = GetBuildSeconds();
 					TotalSeconds += seconds;
 					if (taskAttribute != null)
-						BuildLogger.Log($"{taskAttribute.Desc}耗时：{seconds}秒");
+						BuildLogger.Log($"{taskAttribute.TaskDesc}耗时：{seconds}秒");
 				}
 				catch (Exception e)
 				{
 					EditorTools.ClearProgressBar();
 					buildResult.FailedTask = task.GetType().Name;
-					buildResult.FailedInfo = e.ToString();
+					buildResult.ErrorInfo = e.ToString();
 					buildResult.Success = false;
 					break;
 				}

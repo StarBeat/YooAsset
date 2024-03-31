@@ -166,7 +166,7 @@ namespace YooAsset.Editor
 				string[] findAssets = EditorTools.FindAssets(EAssetSearchType.All, collectDirectory);
 				foreach (string assetPath in findAssets)
 				{
-					if (IsValidateAsset(assetPath, isRawFilePackRule) && IsCollectAsset(assetPath))
+					if (IsValidateAsset(assetPath, isRawFilePackRule) && IsCollectAsset(group, assetPath))
 					{
 						if (result.ContainsKey(assetPath) == false)
 						{
@@ -183,7 +183,7 @@ namespace YooAsset.Editor
 			else
 			{
 				string assetPath = CollectPath;
-				if (IsValidateAsset(assetPath, isRawFilePackRule) && IsCollectAsset(assetPath))
+				if (IsValidateAsset(assetPath, isRawFilePackRule) && IsCollectAsset(group, assetPath))
 				{
 					var collectAssetInfo = CreateCollectAssetInfo(command, group, assetPath, isRawFilePackRule);
 					result.Add(assetPath, collectAssetInfo);
@@ -197,16 +197,23 @@ namespace YooAsset.Editor
 			// 检测可寻址地址是否重复
 			if (command.EnableAddressable)
 			{
-				HashSet<string> adressTemper = new HashSet<string>();
+				var addressTemper = new Dictionary<string, string>();
 				foreach (var collectInfoPair in result)
 				{
 					if (collectInfoPair.Value.CollectorType == ECollectorType.MainAssetCollector)
 					{
 						string address = collectInfoPair.Value.Address;
-						if (adressTemper.Contains(address) == false)
-							adressTemper.Add(address);
+						string assetPath = collectInfoPair.Value.AssetPath;
+						if (string.IsNullOrEmpty(address))
+							continue;
+
+						if (address.StartsWith("Assets/") || address.StartsWith("assets/"))
+							throw new Exception($"The address can not set asset path in collector : {CollectPath} \nAssetPath: {assetPath}");
+
+						if (addressTemper.TryGetValue(address, out var existed) == false)
+							addressTemper.Add(address, assetPath);
 						else
-							throw new Exception($"The address is existed : {address} in collector : {CollectPath}");
+							throw new Exception($"The address is existed : {address} in collector : {CollectPath} \nAssetPath:\n     {existed}\n     {assetPath}");
 					}
 				}
 			}
@@ -244,13 +251,13 @@ namespace YooAsset.Editor
 
 			// 忽略编辑器下的类型资源
 			Type assetType = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
-			if (assetType == typeof(LightingDataAsset))
+			if (assetType == typeof(LightingDataAsset) || assetType == typeof(LightmapParameters))
 				return false;
 
 			// 检测原生文件是否合规
 			if (isRawFilePackRule)
 			{
-				string extension = StringUtility.RemoveFirstChar(System.IO.Path.GetExtension(assetPath));
+				string extension = EditorTools.RemoveFirstChar(System.IO.Path.GetExtension(assetPath));
 				if (extension == EAssetFileExtension.unity.ToString() || extension == EAssetFileExtension.prefab.ToString() ||
 					extension == EAssetFileExtension.fbx.ToString() || extension == EAssetFileExtension.mat.ToString() ||
 					extension == EAssetFileExtension.controller.ToString() || extension == EAssetFileExtension.anim.ToString() ||
@@ -287,15 +294,11 @@ namespace YooAsset.Editor
 
 			return true;
 		}
-		private bool IsCollectAsset(string assetPath)
+		private bool IsCollectAsset(AssetBundleCollectorGroup group, string assetPath)
 		{
-			Type assetType = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
-			if (assetType == typeof(UnityEngine.Shader) || assetType == typeof(UnityEngine.ShaderVariantCollection))
-				return true;
-
 			// 根据规则设置过滤资源文件
 			IFilterRule filterRuleInstance = AssetBundleCollectorSettingData.GetFilterRuleInstance(FilterRuleName);
-			return filterRuleInstance.IsCollectAsset(new FilterRuleData(assetPath));
+			return filterRuleInstance.IsCollectAsset(new FilterRuleData(assetPath, CollectPath, group.GroupName, UserData));
 		}
 		private string GetAddress(CollectCommand command, AssetBundleCollectorGroup group, string assetPath)
 		{
@@ -339,11 +342,13 @@ namespace YooAsset.Editor
 			List<string> result = new List<string>(depends.Length);
 			foreach (string assetPath in depends)
 			{
+				// 注意：排除主资源对象
+				if (assetPath == mainAssetPath)
+					continue;
+
 				if (IsValidateAsset(assetPath, false))
 				{
-					// 注意：排除主资源对象
-					if (assetPath != mainAssetPath)
-						result.Add(assetPath);
+					result.Add(assetPath);
 				}
 			}
 			return result;

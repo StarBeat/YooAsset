@@ -4,27 +4,30 @@ using System.Collections.Generic;
 
 namespace YooAsset
 {
-	internal class HostPlayModeImpl : IPlayModeServices, IBundleServices, IRemoteServices
+	internal class HostPlayModeImpl : IPlayModeServices, IBundleServices
 	{
 		private PackageManifest _activeManifest;
 
 		// 参数相关
 		private string _packageName;
-		private bool _locationToLower;
-		private string _defaultHostServer;
-		private string _fallbackHostServer;
-		private IQueryServices _queryServices;
+		private IBuildinQueryServices _buildinQueryServices;
+		private IDeliveryQueryServices _deliveryQueryServices;
+		private IRemoteServices _remoteServices;
+
+		public IRemoteServices RemoteServices
+		{
+			get { return _remoteServices; }
+		}
 
 		/// <summary>
 		/// 异步初始化
 		/// </summary>
-		public InitializationOperation InitializeAsync(string packageName, bool locationToLower, string defaultHostServer, string fallbackHostServer, IQueryServices queryServices)
+		public InitializationOperation InitializeAsync(string packageName, IBuildinQueryServices buildinQueryServices, IDeliveryQueryServices deliveryQueryServices, IRemoteServices remoteServices)
 		{
 			_packageName = packageName;
-			_locationToLower = locationToLower;
-			_defaultHostServer = defaultHostServer;
-			_fallbackHostServer = fallbackHostServer;
-			_queryServices = queryServices;
+			_buildinQueryServices = buildinQueryServices;
+			_deliveryQueryServices = deliveryQueryServices;
+			_remoteServices = remoteServices;
 
 			var operation = new HostPlayModeInitializationOperation(this, packageName);
 			OperationSystem.StartOperation(operation);
@@ -44,38 +47,29 @@ namespace YooAsset
 		}
 		private BundleInfo ConvertToDownloadInfo(PackageBundle packageBundle)
 		{
-			string remoteMainURL = GetRemoteMainURL(packageBundle.FileName);
-			string remoteFallbackURL = GetRemoteFallbackURL(packageBundle.FileName);
+			string remoteMainURL = _remoteServices.GetRemoteMainURL(packageBundle.FileName);
+			string remoteFallbackURL = _remoteServices.GetRemoteFallbackURL(packageBundle.FileName);
 			BundleInfo bundleInfo = new BundleInfo(packageBundle, BundleInfo.ELoadMode.LoadFromRemote, remoteMainURL, remoteFallbackURL);
 			return bundleInfo;
 		}
 
-		// 解压相关
-		private List<BundleInfo> ConvertToUnpackList(List<PackageBundle> unpackList)
+		// 查询相关
+		private bool IsBuildinPackageBundle(PackageBundle packageBundle)
 		{
-			List<BundleInfo> result = new List<BundleInfo>(unpackList.Count);
-			foreach (var packageBundle in unpackList)
-			{
-				var bundleInfo = ConvertToUnpackInfo(packageBundle);
-				result.Add(bundleInfo);
-			}
-			return result;
+			return _buildinQueryServices.QueryStreamingAssets(_packageName, packageBundle.FileName);
 		}
-		private BundleInfo ConvertToUnpackInfo(PackageBundle packageBundle)
+		private bool IsCachedPackageBundle(PackageBundle packageBundle)
 		{
-			return ManifestTools.GetUnpackInfo(packageBundle);
+			return CacheSystem.IsCached(packageBundle.PackageName, packageBundle.CacheGUID);
 		}
-
-		#region IRemoteServices接口
-		public string GetRemoteMainURL(string fileName)
+		private bool IsDeliveryPackageBundle(PackageBundle packageBundle)
 		{
-			return $"{_defaultHostServer}/{fileName}";
+			return _deliveryQueryServices.QueryDeliveryFiles(_packageName, packageBundle.FileName);
 		}
-		public string GetRemoteFallbackURL(string fileName)
+		private DeliveryFileInfo GetDeiveryFileInfo(PackageBundle packageBundle)
 		{
-			return $"{_fallbackHostServer}/{fileName}";
+			return _deliveryQueryServices.GetDeliveryFileInfo(_packageName, packageBundle.FileName);
 		}
-		#endregion
 
 		#region IPlayModeServices接口
 		public PackageManifest ActiveManifest
@@ -83,7 +77,6 @@ namespace YooAsset
 			set
 			{
 				_activeManifest = value;
-				_activeManifest.InitAssetPathMapping(_locationToLower);
 			}
 			get
 			{
@@ -93,16 +86,9 @@ namespace YooAsset
 		public void FlushManifestVersionFile()
 		{
 			if (_activeManifest != null)
-				PersistentHelper.SaveCachePackageVersionFile(_packageName, _activeManifest.PackageVersion);
-		}
-
-		private bool IsBuildinPackageBundle(PackageBundle packageBundle)
-		{
-			return _queryServices.QueryStreamingAssets(packageBundle.FileName);
-		}
-		private bool IsCachedPackageBundle(PackageBundle packageBundle)
-		{
-			return CacheSystem.IsCached(packageBundle.PackageName, packageBundle.CacheGUID);
+			{
+				PersistentTools.GetPersistent(_packageName).SaveSandboxPackageVersionFile(_activeManifest.PackageVersion);
+			}
 		}
 
 		UpdatePackageVersionOperation IPlayModeServices.UpdatePackageVersionAsync(bool appendTimeTicks, int timeout)
@@ -111,9 +97,9 @@ namespace YooAsset
 			OperationSystem.StartOperation(operation);
 			return operation;
 		}
-		UpdatePackageManifestOperation IPlayModeServices.UpdatePackageManifestAsync(string packageVersion, int timeout)
+		UpdatePackageManifestOperation IPlayModeServices.UpdatePackageManifestAsync(string packageVersion, bool autoSaveVersion, int timeout)
 		{
-			var operation = new HostPlayModeUpdatePackageManifestOperation(this, _packageName, packageVersion, timeout);
+			var operation = new HostPlayModeUpdatePackageManifestOperation(this, _packageName, packageVersion, autoSaveVersion, timeout);
 			OperationSystem.StartOperation(operation);
 			return operation;
 		}
@@ -135,6 +121,10 @@ namespace YooAsset
 			List<PackageBundle> downloadList = new List<PackageBundle>(1000);
 			foreach (var packageBundle in manifest.BundleList)
 			{
+				// 忽略分发文件
+				if (IsDeliveryPackageBundle(packageBundle))
+					continue;
+
 				// 忽略缓存文件
 				if (IsCachedPackageBundle(packageBundle))
 					continue;
@@ -160,6 +150,10 @@ namespace YooAsset
 			List<PackageBundle> downloadList = new List<PackageBundle>(1000);
 			foreach (var packageBundle in manifest.BundleList)
 			{
+				// 忽略分发文件
+				if (IsDeliveryPackageBundle(packageBundle))
+					continue;
+
 				// 忽略缓存文件
 				if (IsCachedPackageBundle(packageBundle))
 					continue;
@@ -221,6 +215,10 @@ namespace YooAsset
 			List<PackageBundle> downloadList = new List<PackageBundle>(1000);
 			foreach (var packageBundle in checkList)
 			{
+				// 忽略分发文件
+				if (IsDeliveryPackageBundle(packageBundle))
+					continue;
+
 				// 忽略缓存文件
 				if (IsCachedPackageBundle(packageBundle))
 					continue;
@@ -256,7 +254,7 @@ namespace YooAsset
 				}
 			}
 
-			return ConvertToUnpackList(downloadList);
+			return ManifestTools.ConvertToUnpackInfos(downloadList);
 		}
 
 		ResourceUnpackerOperation IPlayModeServices.CreateResourceUnpackerByTags(string[] tags, int upackingMaxNumber, int failedTryAgain, int timeout)
@@ -284,7 +282,40 @@ namespace YooAsset
 				}
 			}
 
-			return ConvertToUnpackList(downloadList);
+			return ManifestTools.ConvertToUnpackInfos(downloadList);
+		}
+
+		ResourceImporterOperation IPlayModeServices.CreateResourceImporterByFilePaths(string[] filePaths, int importerMaxNumber, int failedTryAgain, int timeout)
+		{
+			List<BundleInfo> importerList = GetImporterListByFilePaths(_activeManifest, filePaths);
+			var operation = new ResourceImporterOperation(importerList, importerMaxNumber, failedTryAgain, timeout);
+			return operation;
+		}
+		private List<BundleInfo> GetImporterListByFilePaths(PackageManifest manifest, string[] filePaths)
+		{
+			List<BundleInfo> result = new List<BundleInfo>();
+			foreach (var filePath in filePaths)
+			{
+				string fileName = System.IO.Path.GetFileName(filePath);
+				if (manifest.TryGetPackageBundleByFileName(fileName, out PackageBundle packageBundle))
+				{
+					// 忽略缓存文件
+					if (IsCachedPackageBundle(packageBundle))
+						continue;
+
+					// 忽略APP资源
+					if (IsBuildinPackageBundle(packageBundle))
+						continue;
+
+					var bundleInfo = ManifestTools.ConvertToImportInfo(packageBundle, filePath);
+					result.Add(bundleInfo);
+				}
+				else
+				{
+					YooLogger.Warning($"Not found package bundle, importer file path : {filePath}");
+				}
+			}
+			return result;
 		}
 		#endregion
 
@@ -293,6 +324,14 @@ namespace YooAsset
 		{
 			if (packageBundle == null)
 				throw new Exception("Should never get here !");
+
+			// 查询分发资源
+			if (IsDeliveryPackageBundle(packageBundle))
+			{
+				DeliveryFileInfo deliveryFileInfo = GetDeiveryFileInfo(packageBundle);
+				BundleInfo bundleInfo = new BundleInfo(packageBundle, BundleInfo.ELoadMode.LoadFromDelivery, deliveryFileInfo.DeliveryFilePath, deliveryFileInfo.DeliveryFileOffset);
+				return bundleInfo;
+			}
 
 			// 查询沙盒资源
 			if (IsCachedPackageBundle(packageBundle))

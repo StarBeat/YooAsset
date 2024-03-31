@@ -16,7 +16,7 @@ namespace YooAsset
 			DeserializeBundleList,
 			Done,
 		}
-	
+
 		private readonly BufferReader _buffer;
 		private int _packageAssetCount;
 		private int _packageBundleCount;
@@ -77,9 +77,15 @@ namespace YooAsset
 					Manifest = new PackageManifest();
 					Manifest.FileVersion = fileVersion;
 					Manifest.EnableAddressable = _buffer.ReadBool();
+					Manifest.LocationToLower = _buffer.ReadBool();
+					Manifest.IncludeAssetGUID = _buffer.ReadBool();
 					Manifest.OutputNameStyle = _buffer.ReadInt32();
 					Manifest.PackageName = _buffer.ReadUTF8();
 					Manifest.PackageVersion = _buffer.ReadUTF8();
+
+					// 检测配置
+					if (Manifest.EnableAddressable && Manifest.LocationToLower)
+						throw new System.Exception("Addressable not support location to lower !");
 
 					_steps = ESteps.PrepareAssetList;
 				}
@@ -89,6 +95,17 @@ namespace YooAsset
 					_packageAssetCount = _buffer.ReadInt32();
 					Manifest.AssetList = new List<PackageAsset>(_packageAssetCount);
 					Manifest.AssetDic = new Dictionary<string, PackageAsset>(_packageAssetCount);
+
+					if (Manifest.EnableAddressable)
+						Manifest.AssetPathMapping1 = new Dictionary<string, string>(_packageAssetCount * 3);
+					else
+						Manifest.AssetPathMapping1 = new Dictionary<string, string>(_packageAssetCount * 2);
+
+					if (Manifest.IncludeAssetGUID)
+						Manifest.AssetPathMapping2 = new Dictionary<string, string>(_packageAssetCount);
+					else
+						Manifest.AssetPathMapping2 = new Dictionary<string, string>();
+
 					_progressTotalValue = _packageAssetCount;
 					_steps = ESteps.DeserializeAssetList;
 				}
@@ -99,6 +116,7 @@ namespace YooAsset
 						var packageAsset = new PackageAsset();
 						packageAsset.Address = _buffer.ReadUTF8();
 						packageAsset.AssetPath = _buffer.ReadUTF8();
+						packageAsset.AssetGUID = _buffer.ReadUTF8();
 						packageAsset.AssetTags = _buffer.ReadUTF8Array();
 						packageAsset.BundleID = _buffer.ReadInt32();
 						packageAsset.DependIDs = _buffer.ReadInt32Array();
@@ -110,6 +128,49 @@ namespace YooAsset
 							throw new System.Exception($"AssetPath have existed : {assetPath}");
 						else
 							Manifest.AssetDic.Add(assetPath, packageAsset);
+
+						// 填充AssetPathMapping1
+						{
+							string location = packageAsset.AssetPath;
+							if (Manifest.LocationToLower)
+								location = location.ToLower();
+
+							// 添加原生路径的映射
+							if (Manifest.AssetPathMapping1.ContainsKey(location))
+								throw new System.Exception($"Location have existed : {location}");
+							else
+								Manifest.AssetPathMapping1.Add(location, packageAsset.AssetPath);
+
+							// 添加无后缀名路径的映射
+							string locationWithoutExtension = Path.ChangeExtension(location, null);
+							if (!ReferenceEquals(location, locationWithoutExtension))
+							{
+								if (Manifest.AssetPathMapping1.ContainsKey(locationWithoutExtension))
+									YooLogger.Warning($"Location have existed : {locationWithoutExtension}");
+								else
+									Manifest.AssetPathMapping1.Add(locationWithoutExtension, packageAsset.AssetPath);
+							}
+						}
+						if (Manifest.EnableAddressable)
+						{
+							string location = packageAsset.Address;
+							if (string.IsNullOrEmpty(location) == false)
+							{
+								if (Manifest.AssetPathMapping1.ContainsKey(location))
+									throw new System.Exception($"Location have existed : {location}");
+								else
+									Manifest.AssetPathMapping1.Add(location, packageAsset.AssetPath);
+							}
+						}
+
+						// 填充AssetPathMapping2
+						if (Manifest.IncludeAssetGUID)
+						{
+							if (Manifest.AssetPathMapping2.ContainsKey(packageAsset.AssetGUID))
+								throw new System.Exception($"AssetGUID have existed : {packageAsset.AssetGUID}");
+							else
+								Manifest.AssetPathMapping2.Add(packageAsset.AssetGUID, packageAsset.AssetPath);
+						}
 
 						_packageAssetCount--;
 						Progress = 1f - _packageAssetCount / _progressTotalValue;
@@ -128,6 +189,8 @@ namespace YooAsset
 					_packageBundleCount = _buffer.ReadInt32();
 					Manifest.BundleList = new List<PackageBundle>(_packageBundleCount);
 					Manifest.BundleDic = new Dictionary<string, PackageBundle>(_packageBundleCount);
+					Manifest.BundleDic2 = new Dictionary<string, PackageBundle>(_packageBundleCount);
+					Manifest.BundleDic3 = new Dictionary<string, PackageBundle>(_packageBundleCount);
 					_progressTotalValue = _packageBundleCount;
 					_steps = ESteps.DeserializeBundleList;
 				}
@@ -137,6 +200,7 @@ namespace YooAsset
 					{
 						var packageBundle = new PackageBundle();
 						packageBundle.BundleName = _buffer.ReadUTF8();
+						packageBundle.UnityCRC = _buffer.ReadUInt32();
 						packageBundle.FileHash = _buffer.ReadUTF8();
 						packageBundle.FileCRC = _buffer.ReadUTF8();
 						packageBundle.FileSize = _buffer.ReadInt64();
@@ -148,6 +212,11 @@ namespace YooAsset
 
 						packageBundle.ParseBundle(Manifest.PackageName, Manifest.OutputNameStyle);
 						Manifest.BundleDic.Add(packageBundle.BundleName, packageBundle);
+						Manifest.BundleDic2.Add(packageBundle.FileName, packageBundle);
+
+						// 注意：原始文件可能存在相同的CacheGUID
+						if (Manifest.BundleDic3.ContainsKey(packageBundle.CacheGUID) == false)
+							Manifest.BundleDic3.Add(packageBundle.CacheGUID, packageBundle);
 
 						_packageBundleCount--;
 						Progress = 1f - _packageBundleCount / _progressTotalValue;

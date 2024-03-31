@@ -7,17 +7,21 @@ namespace YooAsset
 	internal class OfflinePlayModeImpl : IPlayModeServices, IBundleServices
 	{
 		private PackageManifest _activeManifest;
-		private bool _locationToLower;
 
 		/// <summary>
 		/// 异步初始化
 		/// </summary>
-		public InitializationOperation InitializeAsync(string packageName, bool locationToLower)
+		public InitializationOperation InitializeAsync(string packageName)
 		{
-			_locationToLower = locationToLower;
 			var operation = new OfflinePlayModeInitializationOperation(this, packageName);
 			OperationSystem.StartOperation(operation);
 			return operation;
+		}
+
+		// 查询相关
+		private bool IsCachedPackageBundle(PackageBundle packageBundle)
+		{
+			return CacheSystem.IsCached(packageBundle.PackageName, packageBundle.CacheGUID);
 		}
 
 		#region IPlayModeServices接口
@@ -26,7 +30,6 @@ namespace YooAsset
 			set
 			{
 				_activeManifest = value;
-				_activeManifest.InitAssetPathMapping(_locationToLower);
 			}
 			get
 			{
@@ -43,7 +46,7 @@ namespace YooAsset
 			OperationSystem.StartOperation(operation);
 			return operation;
 		}
-		UpdatePackageManifestOperation IPlayModeServices.UpdatePackageManifestAsync(string packageVersion, int timeout)
+		UpdatePackageManifestOperation IPlayModeServices.UpdatePackageManifestAsync(string packageVersion, bool autoSaveVersion, int timeout)
 		{
 			var operation = new OfflinePlayModeUpdatePackageManifestOperation();
 			OperationSystem.StartOperation(operation);
@@ -71,11 +74,77 @@ namespace YooAsset
 
 		ResourceUnpackerOperation IPlayModeServices.CreateResourceUnpackerByAll(int upackingMaxNumber, int failedTryAgain, int timeout)
 		{
-			return ResourceUnpackerOperation.CreateEmptyUnpacker(upackingMaxNumber, failedTryAgain, timeout);
+			List<BundleInfo> unpcakList = GetUnpackListByAll(_activeManifest);
+			var operation = new ResourceUnpackerOperation(unpcakList, upackingMaxNumber, failedTryAgain, timeout);
+			return operation;
 		}
+		private List<BundleInfo> GetUnpackListByAll(PackageManifest manifest)
+		{
+			List<PackageBundle> downloadList = new List<PackageBundle>(1000);
+			foreach (var packageBundle in manifest.BundleList)
+			{
+				// 忽略缓存文件
+				if (IsCachedPackageBundle(packageBundle))
+					continue;
+
+				downloadList.Add(packageBundle);
+			}
+
+			return ManifestTools.ConvertToUnpackInfos(downloadList);
+		}
+
 		ResourceUnpackerOperation IPlayModeServices.CreateResourceUnpackerByTags(string[] tags, int upackingMaxNumber, int failedTryAgain, int timeout)
 		{
-			return ResourceUnpackerOperation.CreateEmptyUnpacker(upackingMaxNumber, failedTryAgain, timeout);
+			List<BundleInfo> unpcakList = GetUnpackListByTags(_activeManifest, tags);
+			var operation = new ResourceUnpackerOperation(unpcakList, upackingMaxNumber, failedTryAgain, timeout);
+			return operation;
+		}
+		private List<BundleInfo> GetUnpackListByTags(PackageManifest manifest, string[] tags)
+		{
+			List<PackageBundle> downloadList = new List<PackageBundle>(1000);
+			foreach (var packageBundle in manifest.BundleList)
+			{
+				// 忽略缓存文件
+				if (IsCachedPackageBundle(packageBundle))
+					continue;
+
+				// 查询DLC资源
+				if (packageBundle.HasTag(tags))
+				{
+					downloadList.Add(packageBundle);
+				}
+			}
+
+			return ManifestTools.ConvertToUnpackInfos(downloadList);
+		}
+
+		ResourceImporterOperation IPlayModeServices.CreateResourceImporterByFilePaths(string[] filePaths, int importerMaxNumber, int failedTryAgain, int timeout)
+		{
+			List<BundleInfo> importerList = GetImporterListByFilePaths(_activeManifest, filePaths);
+			var operation = new ResourceImporterOperation(importerList, importerMaxNumber, failedTryAgain, timeout);
+			return operation;
+		}
+		private List<BundleInfo> GetImporterListByFilePaths(PackageManifest manifest, string[] filePaths)
+		{
+			List<BundleInfo> result = new List<BundleInfo>();
+			foreach (var filePath in filePaths)
+			{
+				string fileName = System.IO.Path.GetFileName(filePath);
+				if (manifest.TryGetPackageBundleByFileName(fileName, out PackageBundle packageBundle))
+				{
+					// 忽略缓存文件
+					if (IsCachedPackageBundle(packageBundle))
+						continue;
+
+					var bundleInfo = ManifestTools.ConvertToImportInfo(packageBundle, filePath);
+					result.Add(bundleInfo);
+				}
+				else
+				{
+					YooLogger.Warning($"Not found package bundle, importer file path : {filePath}");
+				}
+			}
+			return result;
 		}
 		#endregion
 

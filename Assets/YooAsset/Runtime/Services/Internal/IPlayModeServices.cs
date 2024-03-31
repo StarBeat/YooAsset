@@ -21,7 +21,7 @@ namespace YooAsset
 		/// <summary>
 		/// 向网络端请求并更新清单
 		/// </summary>
-		UpdatePackageManifestOperation UpdatePackageManifestAsync(string packageVersion, int timeout);
+		UpdatePackageManifestOperation UpdatePackageManifestAsync(string packageVersion, bool autoSaveVersion, int timeout);
 
 		/// <summary>
 		/// 预下载指定版本的包裹内容
@@ -36,5 +36,8 @@ namespace YooAsset
 		// 解压相关
 		ResourceUnpackerOperation CreateResourceUnpackerByAll(int upackingMaxNumber, int failedTryAgain, int timeout);
 		ResourceUnpackerOperation CreateResourceUnpackerByTags(string[] tags, int upackingMaxNumber, int failedTryAgain, int timeout);
+
+		// 导入相关
+		ResourceImporterOperation CreateResourceImporterByFilePaths(string[] filePaths, int importerMaxNumber, int failedTryAgain, int timeout);
 	}
 }

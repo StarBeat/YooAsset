@@ -10,8 +10,7 @@ namespace YooAsset
 			DownloadManifestFile,
 			Done,
 		}
-
-		private static int RequestCount = 0;
+	
 		private readonly IRemoteServices _remoteServices;
 		private readonly string _packageName;
 		private readonly string _packageVersion;
@@ -19,6 +18,7 @@ namespace YooAsset
 		private UnityWebFileRequester _downloader1;
 		private UnityWebFileRequester _downloader2;
 		private ESteps _steps = ESteps.None;
+		private int _requestCount = 0;
 
 		internal DownloadManifestOperation(IRemoteServices remoteServices, string packageName, string packageVersion, int timeout)
 		{
@@ -29,7 +29,7 @@ namespace YooAsset
 		}
 		internal override void Start()
 		{
-			RequestCount++;
+			_requestCount = RequestHelper.GetRequestFailedCount(_packageName, nameof(DownloadManifestOperation));
 			_steps = ESteps.DownloadPackageHashFile;
 		}
 		internal override void Update()
@@ -41,7 +41,7 @@ namespace YooAsset
 			{
 				if (_downloader1 == null)
 				{
-					string savePath = PersistentHelper.GetCachePackageHashFilePath(_packageName, _packageVersion);
+					string savePath = PersistentTools.GetPersistent(_packageName).GetSandboxPackageHashFilePath(_packageVersion);
 					string fileName = YooAssetSettingsData.GetPackageHashFileName(_packageName, _packageVersion);
 					string webURL = GetDownloadRequestURL(fileName);
 					YooLogger.Log($"Beginning to download package hash file : {webURL}");
@@ -58,6 +58,7 @@ namespace YooAsset
 					_steps = ESteps.Done;
 					Status = EOperationStatus.Failed;
 					Error = _downloader1.GetError();
+					RequestHelper.RecordRequestFailed(_packageName, nameof(DownloadManifestOperation));
 				}
 				else
 				{
@@ -71,10 +72,10 @@ namespace YooAsset
 			{
 				if (_downloader2 == null)
 				{
-					string savePath = PersistentHelper.GetCacheManifestFilePath(_packageName, _packageVersion);
+					string savePath = PersistentTools.GetPersistent(_packageName).GetSandboxPackageManifestFilePath(_packageVersion);
 					string fileName = YooAssetSettingsData.GetManifestBinaryFileName(_packageName, _packageVersion);
 					string webURL = GetDownloadRequestURL(fileName);
-					YooLogger.Log($"Beginning to download manifest file : {webURL}");
+					YooLogger.Log($"Beginning to download package manifest file : {webURL}");
 					_downloader2 = new UnityWebFileRequester();
 					_downloader2.SendRequest(webURL, savePath, _timeout);
 				}
@@ -88,6 +89,7 @@ namespace YooAsset
 					_steps = ESteps.Done;
 					Status = EOperationStatus.Failed;
 					Error = _downloader2.GetError();
+					RequestHelper.RecordRequestFailed(_packageName, nameof(DownloadManifestOperation));
 				}
 				else
 				{
@@ -102,10 +104,10 @@ namespace YooAsset
 		private string GetDownloadRequestURL(string fileName)
 		{
 			// 轮流返回请求地址
-			if (RequestCount % 2 == 0)
-				return _remoteServices.GetRemoteFallbackURL(fileName);
-			else
+			if (_requestCount % 2 == 0)
 				return _remoteServices.GetRemoteMainURL(fileName);
+			else
+				return _remoteServices.GetRemoteFallbackURL(fileName);
 		}
 	}
 }

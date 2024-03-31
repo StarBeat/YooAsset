@@ -43,7 +43,10 @@ namespace YooAsset.Editor
 		{
 			if (AssetBundleCollectorSettingData.HasActiveRuleName(ActiveRuleName) == false)
 				throw new Exception($"Invalid {nameof(IActiveRule)} class type : {ActiveRuleName} in group : {GroupName}");
-
+			
+			// 当分组不是激活状态时，直接不进行检测
+			if (ActiveRuleName == nameof(DisableGroup)) return;
+			
 			foreach (var collector in Collectors)
 			{
 				collector.CheckConfigError();
@@ -96,16 +99,20 @@ namespace YooAsset.Editor
 			// 检测可寻址地址是否重复
 			if (command.EnableAddressable)
 			{
-				HashSet<string> adressTemper = new HashSet<string>();
+				var addressTemper = new Dictionary<string, string>();
 				foreach (var collectInfoPair in result)
 				{
 					if (collectInfoPair.Value.CollectorType == ECollectorType.MainAssetCollector)
 					{
 						string address = collectInfoPair.Value.Address;
-						if (adressTemper.Contains(address) == false)
-							adressTemper.Add(address);
+						string assetPath = collectInfoPair.Value.AssetPath;
+						if (string.IsNullOrEmpty(address))
+							continue;
+
+						if (addressTemper.TryGetValue(address, out var existed) == false)
+							addressTemper.Add(address, assetPath);
 						else
-							throw new Exception($"The address is existed : {address} in group : {GroupName}");
+							throw new Exception($"The address is existed : {address} in group : {GroupName} \nAssetPath:\n     {existed}\n     {assetPath}");
 					}
 				}
 			}

@@ -19,7 +19,10 @@ namespace YooAsset
 		public static void Initialize(ILogger logger = null)
 		{
 			if (_isInitialize)
-				throw new Exception($"{nameof(YooAssets)} is initialized !");
+			{
+				UnityEngine.Debug.LogWarning($"{nameof(YooAssets)} is initialized !");
+				return;
+			}
 
 			if (_isInitialize == false)
 			{
@@ -99,6 +102,7 @@ namespace YooAsset
 			if (HasPackage(packageName))
 				throw new Exception($"Package {packageName} already existed !");
 
+			YooLogger.Log($"Create resource package : {packageName}");
 			ResourcePackage package = new ResourcePackage(packageName);
 			_packages.Add(package);
 			return package;
@@ -112,7 +116,7 @@ namespace YooAsset
 		{
 			var package = TryGetPackage(packageName);
 			if (package == null)
-				YooLogger.Error($"Not found assets package : {packageName}");
+				YooLogger.Error($"Not found resource package : {packageName}");
 			return package;
 		}
 
@@ -134,6 +138,24 @@ namespace YooAsset
 					return package;
 			}
 			return null;
+		}
+
+		/// <summary>
+		/// 销毁资源包
+		/// </summary>
+		/// <param name="packageName">资源包名称</param>
+		public static void DestroyPackage(string packageName)
+		{
+			ResourcePackage package = GetPackage(packageName);
+			if (package == null)
+				return;
+
+			YooLogger.Log($"Destroy resource package : {packageName}");
+			_packages.Remove(package);
+			package.DestroyPackage();
+
+			// 清空缓存
+			CacheSystem.ClearPackage(packageName);
 		}
 
 		/// <summary>
@@ -196,6 +218,21 @@ namespace YooAsset
 		}
 
 		/// <summary>
+		/// 设置下载系统参数，网络重定向次数（Unity引擎默认值32）
+		/// 注意：不支持设置为负值
+		/// </summary>
+		public static void SetDownloadSystemRedirectLimit(int redirectLimit)
+		{
+			if (redirectLimit < 0)
+			{
+				YooLogger.Warning($"Invalid param value : {redirectLimit}");
+				return;
+			}
+
+			DownloadSystem.RedirectLimit = redirectLimit;
+		}
+
+		/// <summary>
 		/// 设置异步系统参数，每帧执行消耗的最大时间切片（单位：毫秒）
 		/// </summary>
 		public static void SetOperationSystemMaxTimeSlice(long milliseconds)
@@ -215,31 +252,13 @@ namespace YooAsset
 		{
 			CacheSystem.InitVerifyLevel = verifyLevel;
 		}
-		#endregion
-
-		#region 沙盒相关
-		/// <summary>
-		/// 获取内置文件夹名称
-		/// </summary>
-		public static string GetStreamingAssetBuildinFolderName()
-		{
-			return YooAssetSettings.StreamingAssetsBuildinFolder;
-		}
 
 		/// <summary>
-		/// 获取沙盒的根路径
+		/// 设置缓存系统参数，禁用缓存在WebGL平台
 		/// </summary>
-		public static string GetSandboxRoot()
+		public static void SetCacheSystemDisableCacheOnWebGL()
 		{
-			return PathHelper.GetPersistentRootPath();
-		}
-
-		/// <summary>
-		/// 清空沙盒目录
-		/// </summary>
-		public static void ClearSandbox()
-		{
-			PersistentHelper.DeleteSandbox();
+			CacheSystem.DisableUnityCacheOnWebGL = true;
 		}
 		#endregion
 
